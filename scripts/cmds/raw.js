@@ -5,73 +5,72 @@ const axios = require('axios');
 module.exports = {
   config: {
     name: "raw",
-    version: "2.1",
+    version: "2.4",
     role: 0,
     author: "𝔐𝔯.𝔎𝔦𝔫𝔤",
-    description: "Generate a unique RAW text link publicly",
+    description: "Generate a unique RAW text link publicly with random number IDs",
     category: "convert",
     guide: { 
-      en: "{pn} → Reply to a code snippet to create RAW Link\n{pn} [filename] → Create raw from cmds folder"
+      en: "{pn} → Reply to a code snippet to create RAW Link\n{pn} [filename] → Create raw from cmds folder\n{pn} -e [filename] → Create raw from events folder"
     },
-    countDown: 2
+    countDown: 1
   },
 
   onStart: async function ({ api, event, args }) {
-    let fileName = args[0];
+    let fileName = "";
     let code = "";
 
     try {
       if (event.type === "message_reply" && event.messageReply?.body) {
         code = event.messageReply.body;
-        if (!fileName) {
-          const time = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-          fileName = `raw_${time}.js`;
-        } else if (!fileName.endsWith(".js") && !fileName.endsWith(".txt")) {
-          fileName = `${fileName}.js`;
-        }
-      } else if (fileName) {
+        fileName = args[0] ? (args[0].endsWith(".js") || args[0].endsWith(".txt") ? args[0] : `${args[0]}.js`) : `raw_${Date.now()}.js`;
+      } 
+      else if (args.length > 0) {
         let filePath;
+
         if (args[0] === "-e") {
           const eventFile = args[1];
-          if (!eventFile) return api.sendMessage("⚠ | Please provide filename after -e.", event.threadID, event.messageID);
+          if (!eventFile) {
+            return api.sendMessage("⚠ | Please provide a filename after -e.", event.threadID, event.messageID);
+          }
           fileName = eventFile.endsWith(".js") ? eventFile : `${eventFile}.js`;
           filePath = path.resolve(__dirname, '../../scripts/events', fileName);
         } else {
-          const commandsPath = path.resolve(__dirname, '../../scripts/cmds');
-          fileName = fileName.endsWith(".js") ? fileName : `${fileName}.js`;
-          filePath = path.join(commandsPath, fileName);
+          fileName = args[0].endsWith(".js") ? args[0] : `${args[0]}.js`;
+          filePath = path.resolve(__dirname, '../../scripts/cmds', fileName);
         }
 
         if (!fs.existsSync(filePath)) {
-          return api.sendMessage(`❌ File "${fileName}" not found!`, event.threadID, event.messageID);
+          return api.sendMessage(`❌ File "${fileName}" not found in the directory!`, event.threadID, event.messageID);
         }
         code = await fs.promises.readFile(filePath, "utf-8");
-      } else {
+      } 
+      else {
         return api.sendMessage("⚠ | Please reply with code OR provide a file name.", event.threadID, event.messageID);
       }
 
-      // Public API Upload (No password needed for users)
       const baseUrl = "https://aliya-official-v4.vercel.app";
+      
       const response = await axios.post(`${baseUrl}/api/raw/save`, {
         title: fileName,
         code: code
-      });
+      }, { timeout: 15000 });
 
       if (!response.data || !response.data.success) {
-        throw new Error("Failed to save code on server");
+        return api.sendMessage("⚠️ Server refused to save the file.", event.threadID, event.messageID);
       }
 
       const fileId = response.data.fileId;
       const rawLink = `${baseUrl}/raw/${fileId}`;
       const signature = `╭───────────────⬣\n│ 𝐌𝐚𝐝𝐞 𝐰𝐢𝐭𝐡 🤍 𝐛𝐲 --𝔐𝔯.𝔎𝔦𝔫𝔤\n╰───────────────⬣`;
 
-      const rawMsg = `✅ 𝐑𝐀𝐖 𝐋𝐈𝐍𝐊 𝐆𝐄𝐍𝐄𝗥𝐀𝐓𝐄𝐃 🌸\n\n📌 𝐅𝐢𝐥𝐞: ${fileName}\n🔗 ${rawLink}\n\n${signature}`;
+      const rawMsg = `✅ HERE IS YOUR RAW LINK 🌸\n\n📌 𝐅𝐢𝐥𝐞: ${fileName}\n🔗 ${rawLink}\n\n${signature}`;
       return api.sendMessage(rawMsg, event.threadID, event.messageID);
 
     } catch (err) {
-      console.error("❌ RAW Error:", err.message || err);
-      return api.sendMessage("⚠️ Failed to create RAW link. Server connection error.", event.threadID, event.messageID);
+      console.error("❌ RAW Error Details:", err?.response?.data || err.message);
+      return api.sendMessage(`⚠️ Failed to create RAW link.\nError: ${err.message}`, event.threadID, event.messageID);
     }
   }
 };
-      
+        
